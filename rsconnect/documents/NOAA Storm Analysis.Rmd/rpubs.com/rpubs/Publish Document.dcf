@@ -1,0 +1,7 @@
+name: Publish Document
+account: rpubs
+server: rpubs.com
+bundleId:
+        https://api.rpubs.com/api/v1/document/144120/4ab8d74aacc1458091539e8be4a1fb77
+url: http://rpubs.com/junworks/144120
+when: 1453172232.52577

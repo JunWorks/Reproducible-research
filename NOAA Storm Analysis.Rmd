@@ -1,0 +1,99 @@
+---
+title: "NOAA Storm Analysis - Assessing the Most Harmful Hazard"
+author: "Jun"
+date: "January 18, 2016"
+output: html_document
+fig_caption: yes
+---
+## Synopsis of Study
+
+This study exploits the NOAA storm database to assess the damage caused by each weather event. The events in the database start in the year 1950 and end in 2011. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+
+The analysis shows that the top weather hazard to human health is tornado (by far!) while flood is most harmful to economy.
+
+## Data Processing
+
+Since recording time spans well over 50 year, there is a lot of inconsistency in the database. Let's first take a look at the data before we start cleaning it.  
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2) # for plot
+library(dplyr) # for data manipulation
+library(car) # for recode()
+```
+
+```{r, cache=TRUE}
+df <- read.csv('repdata-data-StormData.csv.bz2')
+head(df)
+```
+
+The columns that we are intereted in are: `r colnames(df)[c(8, 23:28)]`. For event type, there are `r length(unique(df$EVTYPE))` distinct entries and many of them are duplicate. However, it is time consuming to group all similar events together. For this study, I will group the events that are most frequent.
+```{r}
+event <- df %>%
+  group_by(EVTYPE) %>%
+  summarise(occurrence = sum(!is.na(EVTYPE))) %>%
+  arrange(desc(occurrence))
+event[1:20,]
+```
+
+So I will group "TSTM WIND", "THUNDERSTORM WINDS" and "THUNDERSTORM WIND" as well as "MARINE TSTM WIND"and "MARINE THUNDERSTORM WIND". Now top 20 events become:
+```{r}
+df[df$EVTYPE == "TSTM WIND", ]$EVTYPE = "THUNDERSTORM WIND"
+df[df$EVTYPE == "THUNDERSTORM WINDS", ]$EVTYPE = "THUNDERSTORM WIND"
+df[df$EVTYPE == "MARINE TSTM WIND", ]$EVTYPE = "MARINE THUNDERSTORM WIND"
+
+event <- df %>%
+  group_by(EVTYPE) %>%
+  summarise(occurrence = sum(!is.na(EVTYPE))) %>%
+  arrange(desc(occurrence))
+event[1:20,]
+```
+
+Next, we need to set the damage exponent correct. I first identify the unique entries and then assign correct exponent to understandable labels. Others are set to be 0.
+
+```{r}
+unique(df$PROPDMGEXP)
+unique(df$CROPDMGEXP)
+df$PROPDMGEXP <- as.numeric(recode(as.character(df$PROPDMGEXP), 
+    "'K'=1e+3;'M'=1e+6;'B'=1e+9;'m'=1e+6;'h'=1e+2;'H'=1e+2;else = 0"))
+df$CROPDMGEXP <- as.numeric(recode(as.character(df$CROPDMGEXP), 
+    "'M'=1e+6;'K'=1e+3;'m'=1e+6;'B'=1e+9;'k'=1e+3;else=0"))
+```
+
+## Result
+### Q1
+Across the United States, which types of events are most harmful with respect to population health?
+
+```{r, fig.cap='Fig.1 Top 5 Events that Lead to Health Damage', fig.align="center"}
+damage.health <- df %>%
+  group_by(EVTYPE) %>%
+  summarise(Total = sum(FATALITIES, na.rm = T)+sum(INJURIES, na.rm = T)) %>%
+  arrange(desc(Total))
+
+ggplot(data = damage.health[1:5,], aes(x = EVTYPE, y = Total, fill = EVTYPE)) + 
+  geom_bar(stat = 'identity') + scale_x_discrete(limits=unique(damage.health[1:5,]$EVTYPE))+
+  ylab('Total Fatalities and Injuries') + ggtitle('Top 5 Events that Lead to Health Damage') + scale_fill_discrete(name="Event Type")+
+  theme_bw(base_size = 15) + 
+  theme(legend.position = c(0.6, 0.6), axis.text.x = element_text(angle = 20, hjust = 0.5), axis.title.x = element_blank())
+```
+
+As we can see from the plot above, tornado is by far the most harmful hazard to population health. In fact, the total fatalities and injuries caused by tornado is more the than the rest combined. It accounts for `r round(damage.health[1,]$Total/sum(damage.health$Total), 2)*100`% of the total.
+
+### Q2
+Across the United States, which types of events have the greatest economic consequences?
+
+```{r, fig.cap='Fig.2 Top 5 Events that Lead to Economic Damage', fig.align="center"}
+damage.economic <- df %>%
+  group_by(EVTYPE) %>%
+  summarise(Total = sum(PROPDMG*PROPDMGEXP, na.rm = T)+sum(CROPDMG*CROPDMGEXP, na.rm = T)) %>%
+  arrange(desc(Total))
+
+ggplot(data = damage.economic[1:5,], aes(x = EVTYPE, y = Total/1000000, fill = EVTYPE)) + 
+  geom_bar(stat = 'identity') + scale_x_discrete(limits=unique(damage.economic[1:5,]$EVTYPE))+
+  ylab('Total Economic Damage (M$)') + ggtitle('Top 5 Events that Lead to Economic Damage') + scale_fill_discrete(name="Event Type")+
+  theme_bw(base_size = 15) + 
+  theme(legend.position = c(0.6, 0.7), axis.text.x = element_text(angle = 20, hjust = 0.5), axis.title.x = element_blank())
+```
+
+When it comes to damage to economy, flood is the most harmful. It accounts for `r round(damage.economic[1,]$Total/sum(damage.economic$Total), 2)*100`% of the total economy loss. Note the unit of economic loss is in millions of dollars.
+
+## Conclusion
+I have used NOAA storm database to analyze the most harmful weather hazard in terms of population health damage and economy loss. While the data shows inconsitency over the time, I have corrected the entries that are most frequent. The result is lightly affected by less frequent events, therefore considered as trustworthy.
